@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101827">
+<title>Deriv Matches & Differs Analyzer</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121d30;--line:#26354d;--text:#edf3ff;--muted:#9fb0ca;--accent:#69e0b5;--warn:#ffd479}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:auto;padding:18px 14px 40px}.top{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+.logo{width:46px;height:46px;border-radius:14px;background:#173a43;display:grid;place-items:center;color:var(--accent);font-size:25px;font-weight:800}
+h1{font-size:22px;margin:0} .sub{color:var(--muted);font-size:13px;margin-top:3px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+label{display:block;font-size:13px;color:var(--muted);margin:0 0 7px}
+select,button{width:100%;border-radius:11px;padding:12px;border:1px solid var(--line);background:#0d1728;color:var(--text);font-size:15px}
+button{background:var(--accent);color:#092016;font-weight:750;border:0;margin-top:10px;cursor:pointer}
+button.secondary{background:#20314b;color:var(--text);border:1px solid var(--line)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.metric{background:#0d1728;border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.metric .k{font-size:12px;color:var(--muted)}.metric .v{font-size:21px;font-weight:750;overflow-wrap:anywhere;margin-top:4px}
+.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}
+.dot{width:9px;height:9px;border-radius:50%;background:#e7b65a}.dot.ok{background:var(--accent)}
+.signal{font-size:18px;font-weight:800;margin:6px 0}.note{font-size:13px;line-height:1.5;color:var(--muted)}
+.small{font-size:12px;color:var(--muted)}.pill{display:inline-block;padding:4px 8px;border-radius:999px;background:#24334b;font-size:12px}
+footer{font-size:12px;color:var(--muted);line-height:1.55;padding:8px 2px}
+@media(min-width:560px){.grid{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div class="logo">↗</div>
+    <div><h1>Deriv Matches & Differs</h1><div class="sub">Live quotes • Last-digit stats • Manual trading only</div></div>
+  </header>
+
+  <section class="panel">
+    <div class="status"><span id="dot" class="dot"></span><span id="status">Connecting to public market data…</span></div>
+    <div style="margin-top:15px">
+      <label for="market">Market</label>
+      <select id="market"><option value="">Loading available markets…</option></select>
+    </div>
+    <button id="connect">Connect / refresh market</button>
+    <button id="disconnect" class="secondary">Disconnect live feed</button>
+    <p class="small">Public market data only. You do not need to enter a Deriv password or API token.</p>
+  </section>
+
+
+  <section class="panel" id="matchesDiffers">
+    <div style="font-weight:800;font-size:18px">Matches / Differs analyzer</div>
+    <p class="note">Choose a last digit from 0–9. This tool counts past live quote digits and compares them with your selected digit. It does not predict the next tick or place trades.</p>
+    <div style="margin-top:12px">
+      <label for="predictionDigit">Digit to analyze</label>
+      <select id="predictionDigit">
+        <option value="0">0</option><option value="1">1</option><option value="2">2</option>
+        <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+        <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option>
+      </select>
+    </div>
+    <div class="grid" style="margin-top:12px">
+      <div class="metric"><div class="k">Matches in sample</div><div class="v" id="matchesCount">—</div></div>
+      <div class="metric"><div class="k">Differs in sample</div><div class="v" id="differsCount">—</div></div>
+    </div>
+    <div class="signal" id="mdSummary" style="margin-top:14px">Waiting for live quotes</div>
+    <p class="note" id="mdDetail">After quotes arrive, the page will count how often the selected digit appeared and how often any other digit appeared in the recent sample.</p>
+  </section>
+
+  <section class="panel">
+    <div class="grid">
+      <div class="metric"><div class="k">Latest quote</div><div class="v" id="quote">—</div></div>
+      <div class="metric"><div class="k">Last digit</div><div class="v" id="digit">—</div></div>
+      <div class="metric"><div class="k">Ticks received</div><div class="v" id="count">0</div></div>
+      <div class="metric"><div class="k">Connection</div><div class="v" id="conn">Waiting</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <span class="pill">Rise / Fall</span>
+    <div class="signal" id="trend">Waiting for enough live ticks</div>
+    <p class="note" id="trendDetail">This simple check compares the latest quote with a quote from earlier in the recent sample.</p>
+  </section>
+
+  <section class="panel">
+    <span class="pill">Even / Odd</span>
+    <div class="grid" style="margin-top:12px">
+      <div class="metric"><div class="k">Even digits in sample</div><div class="v" id="even">—</div></div>
+      <div class="metric"><div class="k">Odd digits in sample</div><div class="v" id="odd">—</div></div>
+    </div>
+    <p class="note" id="digitDetail">The counts describe past observed last digits only. They do not tell you which digit will come next.</p>
+  </section>
+
+  <section class="panel">
+    <div style="font-weight:750;margin-bottom:8px">Recent quotes</div>
+    <div id="recent" class="note">No quotes received yet.</div>
+  </section>
+
+  <footer>
+    <strong>Risk note:</strong> This is an educational signal analyzer, not a winning bot or financial advice. Rise/Fall and last-digit outcomes can be unpredictable. Past ticks do not reliably predict future results. Test on demo only; never risk money you cannot afford to lose. This website does not place trades.
+  </footer>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const marketSelect = $('market');
+  let ws = null, subscriptionId = null, ticks = [], total = 0, marketList = [];
+  const endpoint = 'wss://ws.derivws.com/websockets/v3?app_id=1089';
+
+  function status(message, connected=false) {
+    $('status').textContent = message;
+    $('dot').className = connected ? 'dot ok' : 'dot';
+    $('conn').textContent = connected ? 'Live' : 'Offline';
+  }
+  function send(payload) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+  }
+  function lastDigit(quote, pip) {
+    const decimals = Number.isFinite(Number(pip)) ? Number(pip) : 2;
+    const fixed = Number(quote).toFixed(Math.min(Math.max(decimals, 0), 10));
+    const digits = fixed.replace('.', '').replace('-', '');
+    return Number(digits.slice(-1));
+  }
+  function showTick(tick) {
+    const quote = Number(tick.quote);
+    const pip = tick.pip_size ?? 2;
+    const digit = lastDigit(quote, pip);
+    ticks.push({quote, digit, time: tick.epoch || Math.floor(Date.now()/1000)});
+    if (ticks.length > 100) ticks.shift();
+    total++;
+    $('quote').textContent = quote.toFixed(Math.min(Number(pip), 8));
+    $('digit').textContent = String(digit) + (digit % 2 === 0 ? ' · Even' : ' · Odd');
+    $('count').textContent = String(total);
+    updateAnalysis();
+  }
+
+  function updateMatchesDiffers() {
+    const digitSelect = document.getElementById('predictionDigit');
+    const chosen = Number(digitSelect.value);
+    const sample = ticks.slice(-50);
+    if (!sample.length) {
+      $('matchesCount').textContent = '—';
+      $('differsCount').textContent = '—';
+      $('mdSummary').textContent = 'Waiting for live quotes';
+      return;
+    }
+    const matches = sample.filter(t => t.digit === chosen).length;
+    const differs = sample.length - matches;
+    $('matchesCount').textContent = `${matches} / ${sample.length} (${Math.round(matches/sample.length*100)}%)`;
+    $('differsCount').textContent = `${differs} / ${sample.length} (${Math.round(differs/sample.length*100)}%)`;
+    $('mdSummary').textContent = `Digit ${chosen}: observed ${matches} match(es)`;
+    $('mdDetail').textContent = `In the latest ${sample.length} quotes, digit ${chosen} appeared ${matches} time(s), while ${differs} quote(s) ended in another digit. These are historical frequencies only, not a forecast of the next tick.`;
+  }
+
+  function updateAnalysis() {
+    updateMatchesDiffers();
+    const n = ticks.length;
+    if (!n) return;
+    const evenCount = ticks.filter(t => t.digit % 2 === 0).length;
+    const oddCount = n - evenCount;
+    $('even').textContent = `${evenCount} / ${n} (${Math.round(evenCount/n*100)}%)`;
+    $('odd').textContent = `${oddCount} / ${n} (${Math.round(oddCount/n*100)}%)`;
+    if (n >= 10) {
+      const earlier = ticks[Math.max(0, n - 10)].quote;
+      const latest = ticks[n - 1].quote;
+      const change = latest - earlier;
+      const threshold = Math.max(Math.abs(earlier) * 0.000001, 0.00000001);
+      if (change > threshold) {
+        $('trend').textContent = 'Recent movement: UP';
+        $('trendDetail').textContent = `Latest quote is above the quote from about 10 observations ago (${earlier} → ${latest}). This is a description of recent movement, not a prediction.`;
+      } else if (change < -threshold) {
+        $('trend').textContent = 'Recent movement: DOWN';
+        $('trendDetail').textContent = `Latest quote is below the quote from about 10 observations ago (${earlier} → ${latest}). This is a description of recent movement, not a prediction.`;
+      } else {
+        $('trend').textContent = 'Recent movement: MIXED / FLAT';
+        $('trendDetail').textContent = 'The latest quote is close to the quote from about 10 observations ago. There is no clear direction from this simple check.';
+      }
+    } else {
+      $('trend').textContent = `Collecting ticks (${n}/10)`;
+      $('trendDetail').textContent = 'Wait for at least 10 live quotes before the simple recent-movement comparison appears.';
+    }
+    $('digitDetail').textContent = `In the last ${n} observed ticks, ${evenCount} last digits were even and ${oddCount} were odd. This is historical counting only; it is not an edge or a next-digit forecast.`;
+    $('recent').textContent = ticks.slice(-8).reverse().map(t => `${new Date(t.time*1000).toLocaleTimeString()} — ${t.quote} (last digit ${t.digit})`).join('  •  ');
+  }
+  function closeSocket() {
+    if (ws) {
+      try { if (subscriptionId) send({forget: subscriptionId}); } catch (_) {}
+      try { ws.close(); } catch (_) {}
+    }
+    ws = null; subscriptionId = null;
+    status('Disconnected');
+  }
+  function connect() {
+    closeSocket();
+    ticks = []; total = 0;
+    $('quote').textContent = '—'; $('digit').textContent = '—'; $('count').textContent = '0';
+    $('even').textContent = '—'; $('odd').textContent = '—';
+    $('trend').textContent = 'Waiting for enough live ticks'; $('recent').textContent = 'No quotes received yet.';
+    status('Connecting to Deriv…');
+    ws = new WebSocket(endpoint);
+    ws.onopen = () => {
+      status('Connected; requesting available markets…', true);
+      send({active_symbols:'brief', product_type:'basic', req_id:1});
+    };
+    ws.onmessage = event => {
+      let data;
+      try { data = JSON.parse(event.data); } catch (_) { return; }
+      if (data.error) {
+        status('API message: ' + data.error.message);
+        return;
+      }
+      if (data.msg_type === 'active_symbols') {
+        marketList = (data.active_symbols || []).filter(s =>
+          /volatility|crash|boom|step|jump|range break/i.test(s.display_name || s.symbol)
+        );
+        if (!marketList.length) marketList = data.active_symbols || [];
+        const current = marketSelect.value;
+        marketSelect.innerHTML = '';
+        marketList.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.symbol;
+          opt.textContent = s.display_name || s.symbol;
+          marketSelect.appendChild(opt);
+        });
+        if (current && marketList.some(s => s.symbol === current)) marketSelect.value = current;
+        if (marketSelect.options.length) startTicks();
+        else status('No markets returned. Try reconnecting.');
+      }
+      if (data.msg_type === 'tick' && data.tick) {
+        showTick(data.tick);
+        if (data.subscription && data.subscription.id) subscriptionId = data.subscription.id;
+      }
+    };
+    ws.onerror = () => status('Connection error. Check internet and reconnect.');
+    ws.onclose = () => { status('Connection closed'); };
+  }
+  function startTicks() {
+    const symbol = marketSelect.value;
+    if (!symbol) return;
+    ticks = []; total = 0;
+    $('quote').textContent = '—'; $('digit').textContent = '—'; $('count').textContent = '0';
+    send({ticks: symbol, subscribe: 1, req_id: 2});
+    status('Live feed running for ' + (marketSelect.options[marketSelect.selectedIndex]?.textContent || symbol), true);
+  }
+  $('predictionDigit').addEventListener('change', updateMatchesDiffers);
+  $('connect').addEventListener('click', connect);
+  $('disconnect').addEventListener('click', closeSocket);
+  marketSelect.addEventListener('change', startTicks);
+  connect();
+})();
+</script>
+</body>
+</html>
